@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using System.Web.Http.Description;
 
-namespace Expense_Tracker_API.Controllers
+namespace Expense_Tracker_API.Controllers  
 {
 	[Route("[controller]")]
 	[ApiController]
@@ -172,7 +172,7 @@ namespace Expense_Tracker_API.Controllers
 
 			var checkIfExpenseIdExist = _db.Expense.Find(expense.Id);
 			var currentUserId = getCurrentUser().Id;
-
+			
 
 
 
@@ -181,6 +181,42 @@ namespace Expense_Tracker_API.Controllers
 			{
 				_db.Expense.Update(convertToExpense);
 				_db.SaveChanges();
+
+
+				//only update expenseCategory if we have updated expenseType;
+
+				if (checkIfExpenseIdExist.CategoryType != expense.ExpenseType)
+				{
+					var getCategory = _db.categories.FirstOrDefault(o => o.Name == expense.ExpenseType);
+
+					var checkExpenseCategoryExist = _db.ExpenseCategory.FirstOrDefault(o => o.ExpenseId == expense.Id);
+					if (checkExpenseCategoryExist == null)
+					{
+						var newExpenseCategory = new ExpenseCategory
+						{
+							ExpenseId = expense.Id,
+							Categoryid = getCategory!.Id,
+
+							
+						};
+						_db.ExpenseCategory.Add(newExpenseCategory);
+						_db.SaveChanges();
+
+					}
+					else
+					{
+						checkExpenseCategoryExist.Categoryid = getCategory!.Id;
+
+						_db.Update(checkExpenseCategoryExist);
+						_db.SaveChanges();
+					}
+					
+					
+
+
+
+				}
+
 				return Ok("sucessfully updated expense");
 			}else
 			{
@@ -188,6 +224,47 @@ namespace Expense_Tracker_API.Controllers
 			}
 
 		}
+
+
+		[HttpPost("filter")]
+		public IActionResult GetFilteredExpense([FromQuery] String? categoryType, [FromQuery] double? minPrice, [FromQuery] double? maxPrice)
+		{
+			var currentUserId = getCurrentUser().Id;
+
+			var query = _db.Expense.Where(o => o.UsersId == currentUserId);
+
+
+
+			if (!String.IsNullOrEmpty(categoryType))
+			{
+				query = query.Where(o=>o.CategoryType==categoryType);	
+			}
+
+			if (minPrice.HasValue)
+			{
+				query = query.Where(o=>o.ExpenseAmount>=minPrice);
+			}
+
+			if (maxPrice.HasValue)
+			{
+				query = query.Where(o => o.ExpenseAmount <= maxPrice);
+			}
+
+			var filteredQuery = query.ToList();
+
+			if (filteredQuery.Count==0)
+			{
+				return NotFound("no Expense exist with given filter");	
+
+			}
+
+			var data = filteredQuery.Select(e => DtoConverter(e)).ToList();
+			
+			return Ok(data);
+
+
+		}
+
 
 
 
@@ -209,7 +286,7 @@ namespace Expense_Tracker_API.Controllers
 		{
 			return new Expense
 			{
-				Id=0,
+				Id=dto.Id,
 				ExpenseName= dto.ExpenseName,
 				ExpenseAmount= dto.ExpenseAmount,
 				CategoryType=dto.ExpenseType,
